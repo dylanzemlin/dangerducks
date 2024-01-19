@@ -2,7 +2,7 @@ package dangerduck2;
 
 import battlecode.common.*;
 
-import java.util.Random;
+import java.util.*;
 
 public strictfp class RobotPlayer {
     static int turnCount = 0;
@@ -10,51 +10,168 @@ public strictfp class RobotPlayer {
 
     static MapLocation currentTargetLocation = null;
     static MapLocation currentSourceLocation = null;
+    static int turnsSpentFindingLine = 0;
+    static float lastGoodDistance = 999999;
+    static boolean hasFlag = false;
+    static ArrayList<MapLocation> currentLine = new ArrayList<>();
+    static boolean tracingObstacle = false;
+    static Direction bugDirection = null;
     static boolean isCommander = false;
 
-    /*
-        ----------------- SHARED ARRAYS -----------------
+    static Direction[] directions = Direction.DIRECTION_ORDER;
 
-        0 (Map Location): Flag 1
-        1 (Map Location): Flag 2
-        2 (Map Location): Flag 3
-        3 (Boolean): Containers Commander
-        4 (Map Location): Goal
-        5 (Map Location): Rally
-     */
+    private static void generatePathingLine(RobotController rc)
+    {
+        // Generate a line of map locations between us and the target location
+        MapLocation currentLocation = currentSourceLocation;
+        while (currentLocation.distanceSquaredTo(currentTargetLocation) > 2)
+        {
+            currentLine.add(currentLocation);
+            currentLocation = currentLocation.add(currentLocation.directionTo(currentTargetLocation));
+        }
 
-    public static MapLocation extractSharedLocation(RobotController rc, int index) throws GameActionException {
-        int shared = rc.readSharedArray(index);
-        int x = (shared & 0xFF00) >> 8;
-        int y = (shared & 0x00FF);
-        return new MapLocation(x, y);
+        currentLine.add(currentTargetLocation);
+        if (currentLine.size() > 1)
+        {
+            currentLine.remove(0);
+        }
     }
 
-    public static void writeSharedLocation(RobotController rc, MapLocation location, int index) throws GameActionException {
-        int x = location.x;
-        int y = location.y;
-        int shared = (x << 8) | y;
-        rc.writeSharedArray(index, shared);
-    }
+    private static void traceObstacle(RobotController rc, MapInfo[] infos) throws GameActionException
+    {
+        turnsSpentFindingLine += 1;
 
-    public static boolean isSharedLocationSet(RobotController rc, int index) throws GameActionException {
-        int shared = rc.readSharedArray(index);
-        return shared != 0;
-    }
+        // Check if we are on a point on the line
+        if (currentLine.isEmpty())
+        {
+            tracingObstacle = false;
+            return;
+        }
 
-    public static void writeSharedBoolean(RobotController rc, boolean value, int index) throws GameActionException {
-        int shared = value ? 1 : 0;
-        rc.writeSharedArray(index, shared);
-    }
+        for (MapLocation location : currentLine)
+        {
+            float distanceToTarget = rc.getLocation().distanceSquaredTo(currentTargetLocation);
+            if (rc.getLocation().distanceSquaredTo(location) <= 2 && distanceToTarget < lastGoodDistance)
+            {
+                tracingObstacle = false;
+                bugDirection = null;
+                return;
+            }
+        }
 
-    public static boolean extractSharedBoolean(RobotController rc, int index) throws GameActionException {
-        int shared = rc.readSharedArray(index);
-        return shared == 1;
+        // Check if we can move in the bug direction
+        if (rc.canMove(bugDirection))
+        {
+            rc.move(bugDirection);
+            // bugDirection = bugDirection.rotateLeft();
+            return;
+        }
+
+        // Check if the right of the bug direction is blocked
+        Direction rightDirection = bugDirection.rotateRight();
+        if (rc.canMove(rightDirection))
+        {
+            rc.move(rightDirection);
+            bugDirection = rightDirection;
+            return;
+        }
+
+        // Check if the left of the bug direction is blocked
+        Direction leftDirection = bugDirection.rotateLeft();
+        if (rc.canMove(leftDirection))
+        {
+            rc.move(leftDirection);
+            bugDirection = leftDirection;
+            return;
+        }
+
+        boolean goLeft = rng.nextBoolean();
+        if (goLeft)
+        {
+            bugDirection = bugDirection.rotateLeft();
+        } else {
+            bugDirection = bugDirection.rotateRight();
+        }
     }
 
     private static void moveTowards(RobotController rc, MapLocation location) throws GameActionException
     {
-        rc.setIndicatorLine(rc.getLocation(), location, 200, 200, 100);
+        if (isCommander)
+        {
+            rc.setIndicatorLine(rc.getLocation(), location, 0, 200, 100);
+        } else {
+            rc.setIndicatorLine(rc.getLocation(), location, 200, 200, 100);
+        }
+
+        if (rc.hasFlag())
+        {
+            rc.setIndicatorLine(rc.getLocation(), location, 200, 0, 0);
+        }
+
+        // Generate a line of map locations between us and the target location
+        turnsSpentFindingLine++;
+        if (!location.equals(currentTargetLocation) || turnsSpentFindingLine > 10)
+        {
+            currentSourceLocation = rc.getLocation();
+            currentTargetLocation = location;
+            currentLine = new ArrayList<>();
+            turnsSpentFindingLine = 0;
+            generatePathingLine(rc);
+            rc.setIndicatorString("Generating new line");
+        }
+
+        if (currentSourceLocation != null)
+        {
+            if (isCommander)
+            {
+                rc.setIndicatorLine(currentSourceLocation, location, 0, 200, 100);
+            } else {
+                rc.setIndicatorLine(currentSourceLocation, location, 200, 200, 100);
+            }
+        }
+
+        if (currentLine.isEmpty())
+        {
+            rc.setIndicatorString("Line is empty");
+            return;
+        }
+
+        // Get the map information around us
+        MapInfo[] infos = rc.senseNearbyMapInfos();
+
+        // If we are not tracing an obstacle, try and move towards the target location
+        MapLocation nextLocation = currentLine.get(0);
+        rc.setIndicatorDot(nextLocation, 0, 0, 255);
+        Direction dir = rc.getLocation().directionTo(nextLocation);
+        if (rc.canMove(dir))
+        {
+            tracingObstacle = false;
+            bugDirection = null;
+            rc.setIndicatorString("Moving towards target");
+            rc.move(dir);
+            if (currentLine.isEmpty())
+            {
+                return;
+            }
+
+            currentLine.remove(0);
+            return;
+        }
+
+        // If we are tracing an obstacle, try and move around it
+        if (tracingObstacle)
+        {
+            rc.setIndicatorString("Tracing obstacle");
+            traceObstacle(rc, infos);
+            return;
+        }
+
+        // If we can't move towards the target location, try and move around the obstacle
+        tracingObstacle = true;
+        bugDirection = rc.getLocation().directionTo(currentTargetLocation);
+        rc.setIndicatorString("Moving around obstacle");
+        lastGoodDistance = rc.getLocation().distanceSquaredTo(currentTargetLocation);
+        traceObstacle(rc, infos);
     }
 
     private static void trySpawn(RobotController rc) throws GameActionException
@@ -65,50 +182,186 @@ public strictfp class RobotPlayer {
         }
 
         MapLocation[] spawnLocs = rc.getAllySpawnLocations();
-        MapLocation randomLoc = spawnLocs[rng.nextInt(spawnLocs.length)];
-        rc.spawn(randomLoc);
+        for (MapLocation spawnLoc : spawnLocs)
+        {
+            if (rc.canSpawn(spawnLoc))
+            {
+                rc.spawn(spawnLoc);
+                return;
+            }
+        }
+
+        // Can't spawn D:
+    }
+
+    private static void duckCommanderStep(RobotController rc) throws GameActionException
+    {
+        // Check for any dropped flags
+        MapLocation[] flags = rc.senseBroadcastFlagLocations();
+        if (flags.length == 0)
+        {
+            return;
+        }
+
+        // Set the target location to the first flag
+        MapLocation targetLocation = flags[0];
+        Communication.write(Communication.SharedIndex.CURRENT_TARGET, targetLocation);
+    }
+
+    private static void duckCommanderInit(RobotController rc) throws GameActionException
+    {
+        // Set the rally point to the middle spawn point
+        MapLocation[] spawnLocs = rc.getAllySpawnLocations();
+        MapLocation middleSpawn = spawnLocs[spawnLocs.length / 2];
+        Communication.write(Communication.SharedIndex.RALLY_POINT, middleSpawn);
+    }
+
+    private static void commenceDuckMove(RobotController rc) throws GameActionException
+    {
+        // Check if the target location is set
+        if (Communication.hasValidLocation(Communication.SharedIndex.CURRENT_TARGET))
+        {
+            MapLocation targetLocation = Communication.readLocation(Communication.SharedIndex.CURRENT_TARGET);
+            moveTowards(rc, targetLocation);
+            return;
+        }
+
+        // Check if the rally point is set
+        if (Communication.hasValidLocation(Communication.SharedIndex.RALLY_POINT))
+        {
+            MapLocation rallyPoint = Communication.readLocation(Communication.SharedIndex.RALLY_POINT);
+            moveTowards(rc, rallyPoint);
+            return;
+        }
+
+        // Move in a random direction
+        Direction randomDirection = directions[rng.nextInt(directions.length)];
+        if (rc.canMove(randomDirection))
+        {
+            rc.move(randomDirection);
+        }
+    }
+
+    private static void tryCaptureNearestFlag(RobotController rc, FlagInfo[] flags) throws GameActionException {
+        // Check if we can capture any of the flags
+        for (FlagInfo flag : flags)
+        {
+            if (rc.canPickupFlag(flag.getLocation()))
+            {
+                try {
+                    rc.pickupFlag(flag.getLocation());
+                    rc.setIndicatorString("Captured flag");
+                } catch (GameActionException e)
+                {
+                    // Ignore
+                }
+                return;
+            }
+        }
+
+        // Move towards the nearest flag
+        MapLocation nearestFlag = flags[0].getLocation();
+        if (flags[0].isPickedUp())
+        {
+            return;
+        }
+
+        moveTowards(rc, nearestFlag);
+    }
+
+    private static void commenceDuckHeal(RobotController rc) throws GameActionException
+    {
+        // If we are below 3/4 health, heal
+        if (rc.getHealth() < GameConstants.DEFAULT_HEALTH * 0.75f && rc.canHeal(rc.getLocation()))
+        {
+            rc.heal(rc.getLocation());
+            return;
+        }
+
+        // Check if there are any nearby allies that we can heal
+        RobotInfo[] nearbyAllies = rc.senseNearbyRobots(-1, rc.getTeam());
+        for (RobotInfo ally : nearbyAllies)
+        {
+            if (ally.getHealth() < GameConstants.DEFAULT_HEALTH * 0.75f && rc.canHeal(ally.getLocation()))
+            {
+                rc.heal(ally.getLocation());
+                return;
+            }
+        }
     }
 
     private static void commenceDuckStep(RobotController rc) throws GameActionException
     {
+        Communication.initialize(rc);
+
         // Try and spawn the robot
-        trySpawn(rc);
+        try {
+            trySpawn(rc);
+        } catch (GameActionException e)
+        {
+            e.printStackTrace();
+            return;
+        }
+
+        if (!rc.isSpawned())
+        {
+            return;
+        }
 
         // Check if the commander flag is set
-        boolean isCommanderSet = extractSharedBoolean(rc, 3);
-        if (isCommanderSet)
+        boolean isCommanderSet = Communication.readBoolean(Communication.SharedIndex.HAS_LEADER);
+        if (!isCommanderSet)
         {
-            writeSharedLocation(rc, rc.getLocation(), 4);
+            Communication.write(Communication.SharedIndex.HAS_LEADER, true);
             isCommander = true;
+            duckCommanderInit(rc);
         }
 
         // If we are the commander, set the target location to the first flag
         if (isCommander)
         {
-            MapLocation[] droppedFlags = rc.senseBroadcastFlagLocations();
-            if (droppedFlags.length == 0)
+            rc.setIndicatorString("I am commander");
+            duckCommanderStep(rc);
+            return;
+        }
+
+        if (!rc.hasFlag() && hasFlag)
+        {
+            // We either captured the flag or dropped the flag
+            hasFlag = false;
+        }
+
+        if (rc.hasFlag())
+        {
+            hasFlag = true;
+            MapLocation nearestSpawn = rc.getAllySpawnLocations()[5];
+            moveTowards(rc, nearestSpawn);
+            return;
+        }
+
+        // Check if there are any flags within range
+        FlagInfo[] nearbyFlags = rc.senseNearbyFlags(-1, rc.getTeam().opponent());
+        ArrayList<FlagInfo> nearbyFlagsList = new ArrayList<>(Arrays.asList(nearbyFlags));
+        nearbyFlagsList.removeIf(flag -> flag.isPickedUp());
+        if (!nearbyFlagsList.isEmpty())
+        {
+            tryCaptureNearestFlag(rc, nearbyFlagsList.toArray(new FlagInfo[0]));
+            return;
+        }
+
+        // Check if we can attack any of the robots
+        RobotInfo[] robots = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        for (RobotInfo robot : robots)
+        {
+            if (rc.canAttack(robot.getLocation()))
             {
-                // Set the target location to us, as a rally point
-                writeSharedLocation(rc, rc.getLocation(), 4);
-                writeSharedLocation(rc, rc.getLocation(), 5);
+                rc.attack(robot.getLocation());
                 return;
             }
-
-            MapLocation firstFlag = droppedFlags[0];
-            writeSharedLocation(rc, firstFlag, 4);
-            writeSharedLocation(rc, firstFlag, 5);
-            moveTowards(rc, firstFlag);
-            return;
         }
 
-        // If we are not the commander, move towards the target location
-        if (!isSharedLocationSet(rc, 4))
-        {
-            return;
-        }
-
-        MapLocation targetLocation = extractSharedLocation(rc, 4);
-        moveTowards(rc, targetLocation);
+        commenceDuckMove(rc);
+        commenceDuckHeal(rc);
     }
 
     @SuppressWarnings("unused")
