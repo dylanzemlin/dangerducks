@@ -5,194 +5,11 @@ import battlecode.common.*;
 import java.util.*;
 
 public strictfp class RobotPlayer {
-    static int turnCount = 0;
     static final Random rng = new Random();
 
-    static MapLocation currentTargetLocation = null;
-    static MapLocation currentSourceLocation = null;
-    static int turnsSpentFindingLine = 0;
-    static float lastGoodDistance = 999999;
-    static boolean hasFlag = false;
-    static ArrayList<MapLocation> currentLine = new ArrayList<>();
-    static boolean tracingObstacle = false;
-    static Direction bugDirection = null;
     static boolean isCommander = false;
 
     static Direction[] directions = Direction.DIRECTION_ORDER;
-
-    private static void generatePathingLine(RobotController rc)
-    {
-        // Generate a line of map locations between us and the target location
-        MapLocation currentLocation = currentSourceLocation;
-        while (currentLocation.distanceSquaredTo(currentTargetLocation) > 2)
-        {
-            currentLine.add(currentLocation);
-            currentLocation = currentLocation.add(currentLocation.directionTo(currentTargetLocation));
-        }
-
-        currentLine.add(currentTargetLocation);
-        if (currentLine.size() > 1)
-        {
-            currentLine.remove(0);
-        }
-    }
-
-    private static void traceObstacle(RobotController rc, MapInfo[] infos) throws GameActionException
-    {
-        turnsSpentFindingLine += 1;
-
-        // Check if we are on a point on the line
-        if (currentLine.isEmpty())
-        {
-            tracingObstacle = false;
-            return;
-        }
-
-        for (MapLocation location : currentLine)
-        {
-            float distanceToTarget = rc.getLocation().distanceSquaredTo(currentTargetLocation);
-            if (rc.getLocation().distanceSquaredTo(location) <= 2 && distanceToTarget < lastGoodDistance)
-            {
-                tracingObstacle = false;
-                bugDirection = null;
-                return;
-            }
-        }
-
-        // Check if we can move in the bug direction
-        if (rc.canMove(bugDirection))
-        {
-            rc.move(bugDirection);
-            // bugDirection = bugDirection.rotateLeft();
-            return;
-        }
-
-        // Check if the right of the bug direction is blocked
-        Direction rightDirection = bugDirection.rotateRight();
-        if (rc.canMove(rightDirection))
-        {
-            rc.move(rightDirection);
-            bugDirection = rightDirection;
-            return;
-        }
-
-        // Check if the left of the bug direction is blocked
-        Direction leftDirection = bugDirection.rotateLeft();
-        if (rc.canMove(leftDirection))
-        {
-            rc.move(leftDirection);
-            bugDirection = leftDirection;
-            return;
-        }
-
-        boolean goLeft = rng.nextBoolean();
-        if (goLeft)
-        {
-            bugDirection = bugDirection.rotateLeft();
-        } else {
-            bugDirection = bugDirection.rotateRight();
-        }
-    }
-
-    private static void moveTowards(RobotController rc, MapLocation location) throws GameActionException
-    {
-        if (isCommander)
-        {
-            rc.setIndicatorLine(rc.getLocation(), location, 0, 200, 100);
-        } else {
-            rc.setIndicatorLine(rc.getLocation(), location, 200, 200, 100);
-        }
-
-        if (rc.hasFlag())
-        {
-            rc.setIndicatorLine(rc.getLocation(), location, 200, 0, 0);
-        }
-
-        // Generate a line of map locations between us and the target location
-        turnsSpentFindingLine++;
-        if (!location.equals(currentTargetLocation) || turnsSpentFindingLine > 10)
-        {
-            currentSourceLocation = rc.getLocation();
-            currentTargetLocation = location;
-            currentLine = new ArrayList<>();
-            turnsSpentFindingLine = 0;
-            generatePathingLine(rc);
-            rc.setIndicatorString("Generating new line");
-        }
-
-        if (currentSourceLocation != null)
-        {
-            if (isCommander)
-            {
-                rc.setIndicatorLine(currentSourceLocation, location, 0, 200, 100);
-            } else {
-                rc.setIndicatorLine(currentSourceLocation, location, 200, 200, 100);
-            }
-        }
-
-        if (currentLine.isEmpty())
-        {
-            rc.setIndicatorString("Line is empty");
-            return;
-        }
-
-        // Get the map information around us
-        MapInfo[] infos = rc.senseNearbyMapInfos();
-
-        // If we are not tracing an obstacle, try and move towards the target location
-        MapLocation nextLocation = currentLine.get(0);
-        rc.setIndicatorDot(nextLocation, 0, 0, 255);
-        Direction dir = rc.getLocation().directionTo(nextLocation);
-        if (rc.canMove(dir))
-        {
-            tracingObstacle = false;
-            bugDirection = null;
-            rc.setIndicatorString("Moving towards target");
-            rc.move(dir);
-            if (currentLine.isEmpty())
-            {
-                return;
-            }
-
-            currentLine.remove(0);
-            return;
-        }
-
-        // If we are tracing an obstacle, try and move around it
-        if (tracingObstacle)
-        {
-            rc.setIndicatorString("Tracing obstacle");
-            traceObstacle(rc, infos);
-            return;
-        }
-
-        // If we can't move towards the target location, try and move around the obstacle
-        tracingObstacle = true;
-        bugDirection = rc.getLocation().directionTo(currentTargetLocation);
-        rc.setIndicatorString("Moving around obstacle");
-        lastGoodDistance = rc.getLocation().distanceSquaredTo(currentTargetLocation);
-        traceObstacle(rc, infos);
-    }
-
-    private static void trySpawn(RobotController rc) throws GameActionException
-    {
-        if (rc.isSpawned())
-        {
-            return;
-        }
-
-        MapLocation[] spawnLocs = rc.getAllySpawnLocations();
-        for (MapLocation spawnLoc : spawnLocs)
-        {
-            if (rc.canSpawn(spawnLoc))
-            {
-                rc.spawn(spawnLoc);
-                return;
-            }
-        }
-
-        // Can't spawn D:
-    }
 
     private static void duckCommanderStep(RobotController rc) throws GameActionException
     {
@@ -222,7 +39,7 @@ public strictfp class RobotPlayer {
         if (Communication.hasValidLocation(Communication.SharedIndex.CURRENT_TARGET))
         {
             MapLocation targetLocation = Communication.readLocation(Communication.SharedIndex.CURRENT_TARGET);
-            moveTowards(rc, targetLocation);
+            Pathing.moveTowards(targetLocation);
             return;
         }
 
@@ -230,7 +47,7 @@ public strictfp class RobotPlayer {
         if (Communication.hasValidLocation(Communication.SharedIndex.RALLY_POINT))
         {
             MapLocation rallyPoint = Communication.readLocation(Communication.SharedIndex.RALLY_POINT);
-            moveTowards(rc, rallyPoint);
+            Pathing.moveTowards(rallyPoint);
             return;
         }
 
@@ -266,15 +83,19 @@ public strictfp class RobotPlayer {
             return;
         }
 
-        moveTowards(rc, nearestFlag);
+        Pathing.moveTowards(nearestFlag);
     }
 
     private static void commenceDuckHeal(RobotController rc) throws GameActionException
     {
-        // If we are below 3/4 health, heal
-        if (rc.getHealth() < GameConstants.DEFAULT_HEALTH * 0.75f && rc.canHeal(rc.getLocation()))
+        if (rc.getHealth() < GameConstants.DEFAULT_HEALTH * Constants.BEHAVIOUR_HEALING_SELF_THRESHOLD && rc.canHeal(rc.getLocation()) && Constants.BEHAVIOUR_ALLOW_HEALING_SELF)
         {
             rc.heal(rc.getLocation());
+            return;
+        }
+
+        if (!Constants.BEHAVIOUR_ALLOW_HEALING_TEAMMATES)
+        {
             return;
         }
 
@@ -282,7 +103,7 @@ public strictfp class RobotPlayer {
         RobotInfo[] nearbyAllies = rc.senseNearbyRobots(-1, rc.getTeam());
         for (RobotInfo ally : nearbyAllies)
         {
-            if (ally.getHealth() < GameConstants.DEFAULT_HEALTH * 0.75f && rc.canHeal(ally.getLocation()))
+            if (ally.getHealth() < GameConstants.DEFAULT_HEALTH * Constants.BEHAVIOUR_HEALING_TEAMMATES_THRESHOLD && rc.canHeal(ally.getLocation()))
             {
                 rc.heal(ally.getLocation());
                 return;
@@ -292,20 +113,20 @@ public strictfp class RobotPlayer {
 
     private static void commenceDuckStep(RobotController rc) throws GameActionException
     {
-        Communication.initialize(rc);
-
-        // Try and spawn the robot
-        try {
-            trySpawn(rc);
-        } catch (GameActionException e)
+        if (!Actions.spawn())
         {
-            e.printStackTrace();
             return;
         }
 
-        if (!rc.isSpawned())
+        if (Globals.isSetup())
         {
+            SetupActions.vacuum();
             return;
+        }
+
+        if (Globals.pickupFlagDelay > 0)
+        {
+            Globals.pickupFlagDelay -= 1;
         }
 
         // Check if the commander flag is set
@@ -320,23 +141,69 @@ public strictfp class RobotPlayer {
         // If we are the commander, set the target location to the first flag
         if (isCommander)
         {
-            rc.setIndicatorString("I am commander");
+            Actions.upgrade();
             duckCommanderStep(rc);
-            return;
+
+            int swarmLengthRemaining = Communication.getSwarmLength();
+            if (Communication.hasValidLocation(Communication.SharedIndex.SWARM_LOCATION) && swarmLengthRemaining == 0)
+            {
+                Communication.clearLocation(Communication.SharedIndex.SWARM_LOCATION);
+                return;
+            }
+
+            if (Communication.hasValidLocation(Communication.SharedIndex.SWARM_LOCATION) && swarmLengthRemaining > 0)
+            {
+                Communication.reduceSwarmLength();
+            }
         }
 
-        if (!rc.hasFlag() && hasFlag)
+        if (Globals.teamLeader)
+        {
+            rc.setIndicatorDot(rc.getLocation(), 255, 0, 0);
+            SetupActions.setupWaterMines();
+        }
+
+        if (!rc.hasFlag() && Globals.hasFlag)
         {
             // We either captured the flag or dropped the flag
-            hasFlag = false;
+            Globals.hasFlag = false;
         }
 
         if (rc.hasFlag())
         {
-            hasFlag = true;
+            Globals.hasFlag = true;
             MapLocation nearestSpawn = rc.getAllySpawnLocations()[5];
-            moveTowards(rc, nearestSpawn);
+            Pathing.moveTowards(nearestSpawn);
             return;
+        }
+
+        RobotInfo[] robots = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
+        for (RobotInfo robot : robots)
+        {
+            if (robot.hasFlag() && Constants.BEHAVIOUR_ENABLE_FLAG_SWARM)
+            {
+                // The enemy team has our FLAG :(
+                Communication.write(Communication.SharedIndex.SWARM_LOCATION, robot.getLocation());
+            }
+        }
+
+        if (Communication.hasValidLocation(Communication.SharedIndex.SWARM_LOCATION))
+        {
+            MapLocation swarmLocation = Communication.readLocation(Communication.SharedIndex.SWARM_LOCATION);
+            float distance = rc.getLocation().distanceSquaredTo(swarmLocation);
+            if (distance < 45)
+            {
+                Pathing.moveTowards(swarmLocation);
+                for (RobotInfo robot : robots)
+                {
+                    if (rc.canAttack(robot.getLocation()))
+                    {
+                        rc.attack(robot.getLocation());
+                        return;
+                    }
+                }
+                return;
+            }
         }
 
         // Check if there are any flags within range
@@ -350,12 +217,16 @@ public strictfp class RobotPlayer {
         }
 
         // Check if we can attack any of the robots
-        RobotInfo[] robots = rc.senseNearbyRobots(-1, rc.getTeam().opponent());
         for (RobotInfo robot : robots)
         {
             if (rc.canAttack(robot.getLocation()))
             {
                 rc.attack(robot.getLocation());
+                Direction d = rc.getLocation().directionTo(robot.getLocation()).opposite();
+                if (rc.canMove(d))
+                {
+                    rc.move(d);
+                }
                 return;
             }
         }
@@ -367,14 +238,29 @@ public strictfp class RobotPlayer {
     @SuppressWarnings("unused")
     public static void run(RobotController rc) {
         while (true) {
-            turnCount += 1;  // We have now been alive for one more turn!
+            Globals.turn += 1;
 
             try {
+                if (!Globals.initialized)
+                {
+                    Globals.controller = rc;
+                    Globals.id = Communication.getDuckId();
+                    Globals.team = (int)(Globals.id / (GameConstants.ROBOT_CAPACITY / 3f));
+                    Globals.initialized = true;
+
+                    // Assign to first robot on each team
+                    if (Globals.id == 0)
+                    {
+                        Globals.teamLeader = true;
+                    }
+
+                    rc.setIndicatorString("ID: " + Globals.id);
+                }
+
                 commenceDuckStep(rc);
             } catch (GameActionException e) {
                 System.out.println("GameActionException");
                 e.printStackTrace();
-
             } catch (Exception e) {
                 System.out.println("Exception");
                 e.printStackTrace();
