@@ -23,41 +23,41 @@ public strictfp class RobotPlayer {
         5 (Map Location): Rally
      */
 
-    public MapLocation extractSharedLocation(RobotController rc, int index) throws GameActionException {
+    public static MapLocation extractSharedLocation(RobotController rc, int index) throws GameActionException {
         int shared = rc.readSharedArray(index);
         int x = (shared & 0xFF00) >> 8;
         int y = (shared & 0x00FF);
         return new MapLocation(x, y);
     }
 
-    public void writeSharedLocation(RobotController rc, MapLocation location, int index) throws GameActionException {
+    public static void writeSharedLocation(RobotController rc, MapLocation location, int index) throws GameActionException {
         int x = location.x;
         int y = location.y;
         int shared = (x << 8) | y;
         rc.writeSharedArray(index, shared);
     }
 
-    public boolean isSharedLocationSet(RobotController rc, int index) throws GameActionException {
+    public static boolean isSharedLocationSet(RobotController rc, int index) throws GameActionException {
         int shared = rc.readSharedArray(index);
         return shared != 0;
     }
 
-    public void writeSharedBoolean(RobotController rc, boolean value, int index) throws GameActionException {
+    public static void writeSharedBoolean(RobotController rc, boolean value, int index) throws GameActionException {
         int shared = value ? 1 : 0;
         rc.writeSharedArray(index, shared);
     }
 
-    public boolean extractSharedBoolean(RobotController rc, int index) throws GameActionException {
+    public static boolean extractSharedBoolean(RobotController rc, int index) throws GameActionException {
         int shared = rc.readSharedArray(index);
         return shared == 1;
     }
 
-    private void moveTowards(RobotController rc, MapLocation location) throws GameActionException
+    private static void moveTowards(RobotController rc, MapLocation location) throws GameActionException
     {
         rc.setIndicatorLine(rc.getLocation(), location, 200, 200, 100);
     }
 
-    private void trySpawn(RobotController rc) throws GameActionException
+    private static void trySpawn(RobotController rc) throws GameActionException
     {
         if (rc.isSpawned())
         {
@@ -69,7 +69,7 @@ public strictfp class RobotPlayer {
         rc.spawn(randomLoc);
     }
 
-    private void commenceDuckStep(RobotController rc) throws GameActionException
+    private static void commenceDuckStep(RobotController rc) throws GameActionException
     {
         // Try and spawn the robot
         trySpawn(rc);
