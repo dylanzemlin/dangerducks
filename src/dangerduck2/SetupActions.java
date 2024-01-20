@@ -1,9 +1,6 @@
 package dangerduck2;
 
-import battlecode.common.GameActionException;
-import battlecode.common.MapInfo;
-import battlecode.common.MapLocation;
-import battlecode.common.TrapType;
+import battlecode.common.*;
 
 public class SetupActions {
     public static void vacuum() throws GameActionException
@@ -26,33 +23,27 @@ public class SetupActions {
     {
         // Place water mines in checker pattern within our spawn area
         MapLocation[] spawnLocations = Utilities.getSpawnLocations();
-        MapLocation middle = spawnLocations[spawnLocations.length / 2];
-        Pathing.moveTowards(middle);
-
-        MapLocation currentLocation = Globals.controller.getLocation();
-        if (currentLocation.distanceSquaredTo(middle) > 2)
+        if (Globals.waterMinesPlaced > 8)
         {
             return;
         }
 
-        MapInfo[] nearbyInfo = Globals.controller.senseNearbyMapInfos();
-        for (MapInfo info : nearbyInfo)
+        if (Globals.waterMinesPlaced == 4)
         {
-            if (info.getTrapType() != TrapType.NONE || info.isWater() || info.isWall())
-            {
-                continue;
-            }
+            Globals.waterMinesPlaced++;
+        }
+        MapLocation waterMineLocation = spawnLocations[Globals.waterMinesPlaced];
 
-            if (info.getCrumbs() < TrapType.WATER.buildCost)
-            {
-                continue;
-            }
+        if (Globals.controller.getLocation().distanceSquaredTo(waterMineLocation) > 2)
+        {
+            Pathing.moveTowards(waterMineLocation);
+            return;
+        }
 
-            if (Globals.controller.canBuild(TrapType.WATER, info.getMapLocation()))
-            {
-                Globals.controller.build(TrapType.WATER, info.getMapLocation());
-            }
-            Globals.waterMinesPlaced += 1;
+        if (Globals.controller.canBuild(TrapType.WATER, waterMineLocation))
+        {
+            Globals.controller.build(TrapType.WATER, waterMineLocation);
+            Globals.waterMinesPlaced++;
         }
     }
 }

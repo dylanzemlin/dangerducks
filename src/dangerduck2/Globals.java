@@ -10,6 +10,7 @@ public class Globals {
     public static boolean teamLeader;
     public static int waterMinesPlaced = 0;
     public static boolean initialized;
+    public static boolean commander;
     public static RobotController controller;
     /**
      * Whether or not the robot has the flag.

@@ -183,6 +183,25 @@ public class Pathing {
         if (rc.canMove(dir))
         {
             rc.move(dir);
+            return;
+        }
+
+
+        MapLocation target = rc.getLocation().add(dir);
+        if (!rc.onTheMap(target))
+        {
+            return;
+        }
+
+        MapInfo info = rc.senseMapInfo(target);
+        if (!info.isWater())
+        {
+            return;
+        }
+
+        if (rc.canFill(target))
+        {
+            rc.fill(target);
         }
     }
 }

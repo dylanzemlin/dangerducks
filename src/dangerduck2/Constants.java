@@ -10,7 +10,4 @@ public class Constants {
 
     public static boolean BEHAVIOUR_ALLOW_HEALING_TEAMMATES = true;
     public static float BEHAVIOUR_HEALING_TEAMMATES_THRESHOLD = 0.8f;
-
-    public static boolean BEHAVIOUR_ALLOW_HEALING_SELF = true;
-    public static float BEHAVIOUR_HEALING_SELF_THRESHOLD = 0.8f;
 }

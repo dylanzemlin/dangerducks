@@ -7,16 +7,13 @@ import battlecode.common.RobotController;
 
 public class Communication {
     public enum SharedIndex {
-        HAS_LEADER(0),
-        CURRENT_TARGET(1),
-        RALLY_POINT(2),
-        DUCK_IDS(3),
-        SWARM_LOCATION(4),
-        SWARM_LENGTH(5);
+        DUCK_IDS(0),
+        SWARM_LOCATION(1),
+        SWARM_LENGTH(2);
 
         private final int index;
 
-        private SharedIndex(int index) {
+        SharedIndex(int index) {
             this.index = index;
         }
 
